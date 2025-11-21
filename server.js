@@ -1,4 +1,4 @@
-// server.js
+// server.js (ฉบับอ่านบัตร ID Card โดยเฉพาะ)
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -6,35 +6,27 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==== AIGEN CONFIG ====
-const AIGEN_API_URL = 'https://api.aigen.online/aiscript/general-ocr/v2';
-const AIGEN_API_KEY = process.env.AIGEN_API_KEY; // อย่าลืมไปตั้งค่าใน Render นะครับ
+// ==== จุดเปลี่ยนสำคัญ: ใช้ URL สำหรับบัตรประชาชนโดยเฉพาะ ====
+const AIGEN_API_URL = 'https://api.aigen.online/aiscript/thailand-id-card/v2'; 
+const AIGEN_API_KEY = process.env.AIGEN_API_KEY; 
 
 if (!AIGEN_API_KEY) {
-  console.warn('⚠️  WARNING: ยังไม่ได้ใส่ AIGEN_API_KEY ใน Environment Variables');
+  console.warn('⚠️  WARNING: ยังไม่ได้ใส่ AIGEN_API_KEY');
 }
 
-// ==== จุดที่แก้: CORS (เปิดให้ทุกคนเข้าได้ แก้ปัญหา Failed to fetch) ====
 app.use(cors()); 
-// ไม่ต้องมีเงื่อนไขเยอะ เอาแบบนี้ผ่านชัวร์ครับ
-
 app.use(express.json({ limit: '10mb' }));
 
-// ==== API /ocr สำหรับหน้าเว็บเรียกใช้ ====
 app.post('/ocr', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
+    if (!imageBase64) return res.status(400).json({ message: 'ส่งรูปมาด้วยนะครับ' });
 
-    if (!imageBase64) {
-      return res.status(400).json({ message: 'ส่งรูปมาด้วยนะครับ (imageBase64)' });
-    }
-
-    // ยิงไปหา AIGEN
     const response = await fetch(AIGEN_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-AIGEN-KEY': AIGEN_API_KEY, // กุญแจสำคัญ
+        'X-AIGEN-KEY': AIGEN_API_KEY,
       },
       body: JSON.stringify({ image: imageBase64 }),
     });
@@ -42,30 +34,29 @@ app.post('/ocr', async (req, res) => {
     let apiData = {};
     try {
       apiData = await response.json();
-    } catch (e) {
-      apiData = {};
-    }
+    } catch (e) { apiData = {}; }
 
     if (!response.ok) {
       console.error('❌ AIGEN Error:', response.status);
-      return res.status(response.status).json({
-        message: `AIGEN error: ${response.status}`,
-        details: apiData
-      });
+      return res.status(response.status).json({ message: `AIGEN error: ${response.status}` });
     }
 
-    // รวมข้อความจากทุกหน้า
-    let combinedText = '';
-    if (Array.isArray(apiData.data)) {
-      combinedText = apiData.data.map((page) => page.text_page || '').join('\n');
-    }
+    // ==== จุดเปลี่ยน 2: ดึงค่าที่ถูกต้องจากช่องของมันโดยตรง ====
+    // AIGEN ID Card จะส่งค่ากลับมาในตัวแปรชื่อ result
+    const result = apiData.result || {};
 
-    console.log('✅ อ่านบัตรสำเร็จ! ความยาวข้อความ:', combinedText.length);
+    console.log('✅ อ่านบัตรสำเร็จ! ได้ชื่อ:', result.title_name_surname_th);
 
     return res.json({
-      text: combinedText,
-      raw: apiData,
+      // ส่งค่าแบบเจาะจงไปให้หน้าเว็บเลย ไม่ต้องไปเดาเองแล้ว
+      mode: 'id_card',
+      name: result.title_name_surname_th || '',
+      dob: result.dob_th || '',
+      id_number: result.id_number || '',
+      address: result.address_full || '',
+      raw: apiData, // ส่งตัวเต็มไปเผื่ออยากดูเล่น
     });
+
   } catch (err) {
     console.error('Server Error:', err);
     res.status(500).json({ message: 'Server มีปัญหาครับ', error: err.message });
