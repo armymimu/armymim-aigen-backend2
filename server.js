@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-// ✅ ใช้ node-fetch ให้ทำงานได้ทุกเวอร์ชัน Node
+// ✅ ดึง fetch จาก node-fetch (ใช้ได้ทุกเวอร์ชัน Node 18+)
 const fetch = (...args) =>
   import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
@@ -12,17 +12,22 @@ const PORT = process.env.PORT || 3000;
 
 // ==== AIGEN CONFIG ====
 const AIGEN_API_URL = 'https://api.aigen.online/aiscript/general-ocr/v2';
-const AIGEN_API_KEY = process.env.AIGEN_API_KEY; // ต้องไปตั้งใน Render
+const AIGEN_API_KEY = process.env.AIGEN_API_KEY;
 
 if (!AIGEN_API_KEY) {
   console.warn('⚠️  WARNING: ยังไม่ได้ใส่ AIGEN_API_KEY ใน Environment Variables');
 }
 
-// ==== CORS เปิดหมด ให้ frontend จากทุกโดเมนเรียกได้ ====
+// ==== Middleware ====
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// ==== endpoint /ocr ให้ frontend เรียก ====
+// ✅ เพิ่มหน้าเช็คว่า backend ยังหายใจอยู่มั้ย
+app.get('/', (req, res) => {
+  res.send('✅ Armymim AIGEN backend OK');
+});
+
+// ==== API /ocr สำหรับหน้าเว็บเรียกใช้ ====
 app.post('/ocr', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
@@ -33,7 +38,7 @@ app.post('/ocr', async (req, res) => {
         .json({ message: 'ส่งรูปมาด้วยนะครับ (imageBase64)' });
     }
 
-    // ยิงไป AIGEN
+    // ยิงไปหา AIGEN
     const response = await fetch(AIGEN_API_URL, {
       method: 'POST',
       headers: {
